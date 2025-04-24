@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager with Firebase</title>
+    <!-- Bootstrap CSS for styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Task Manager</h1>
+        
+        <!-- Form to Add or Update Tasks -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="card-title">Add New Task</h2>
+                <form id="taskForm">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="To Do">To Do</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Done">Done</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dueDate" class="form-label">Due Date/Time</label>
+                        <input type="datetime-local" class="form-control" id="dueDate" name="dueDate" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="submitButton">Add Task</button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Table to Display Tasks -->
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title">Task List</h2>
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered" id="taskTable">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Description</th>
+                                <th>Status</th>
+                                <th>Due Date/Time</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Tasks will be inserted here dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Firebase and Application Script -->
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+
+        // Replace with your Firebase project configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyDphh3iO1gDXvQbU6NpOiP8eiXeY9RGT4M",
+    authDomain: "takeaway-32e8e.firebaseapp.com",
+    projectId: "takeaway-32e8e",
+    storageBucket: "takeaway-32e8e.firebasestorage.app",
+    messagingSenderId: "542121816336",
+    appId: "1:542121816336:web:1b6924dbe01cb0410eb595"
+  };	
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const tasksRef = collection(db, "TestTask");
+
+        // Application variables
+        let tasks = [];
+        let editingTaskId = null;
+        const taskForm = document.getElementById('taskForm');
+        const taskTableBody = document.querySelector('#taskTable tbody');
+
+        // Real-time listener to fetch and update tasks (READ)
+        onSnapshot(tasksRef, (snapshot) => {
+            tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderTasks();
+        }, (error) => {
+            console.error("Error fetching tasks: ", error);
+        });
+
+        // Handle form submission to add or update tasks (CREATE or UPDATE)
+        taskForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const status = document.getElementById('status').value;
+            const dueDate = document.getElementById('dueDate').value;
+
+            try {
+                if (editingTaskId === null) {
+                    // CREATE: Add new task
+                    await addDoc(tasksRef, { title, description, status, dueDate });
+                    console.log('Task added successfully');
+                } else {
+                    // UPDATE: Modify existing task
+                    console.log('Updating task with ID:', editingTaskId);
+                    const taskRef = doc(db, "TestTask", editingTaskId);
+                    await updateDoc(taskRef, { title, description, status, dueDate });
+                    console.log('Task updated successfully');
+                    editingTaskId = null;
+                    document.getElementById('submitButton').textContent = 'Add Task';
+                }
+                taskForm.reset();
+            } catch (error) {
+                console.error("Error during form submission: ", error);
+            }
+        });
+
+        // Render tasks in the table
+        function renderTasks() {
+            taskTableBody.innerHTML = '';
+            if (tasks.length === 0) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.textContent = 'No tasks yet.';
+                row.appendChild(cell);
+                taskTableBody.appendChild(row);
+            } else {
+                tasks.forEach(task => {
+                    const row = document.createElement('tr');
+                    
+                    row.innerHTML = `
+                        <td>${task.title}</td>
+                        <td>${task.description}</td>
+                        <td>${task.status}</td>
+                        <td>${task.dueDate}</td>
+                        <td>
+                            <button class="btn btn-sm btn-warning me-2" onclick="editTask('${task.id}')">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteTask('${task.id}')">Delete</button>
+                        </td>
+                    `;
+                    taskTableBody.appendChild(row);
+                });
+            }
+        }
+
+        // Populate form for editing a task
+        window.editTask = function(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                document.getElementById('title').value = task.title;
+                document.getElementById('description').value = task.description;
+                document.getElementById('status').value = task.status;
+                document.getElementById('dueDate').value = task.dueDate;
+                editingTaskId = id;
+                document.getElementById('submitButton').textContent = 'Update Task';
+            }
+        }
+
+        // Delete a task from Firestore (DELETE)
+        window.deleteTask = function(id) {
+            if (confirm('Are you sure you want to delete this task?')) {
+                console.log('Deleting task with ID:', id);
+                const taskRef = doc(db, "TestTask", id);
+                deleteDoc(taskRef)
+                    .then(() => {
+                        console.log('Task deleted successfully');
+                    })
+                    .catch((error) => {
+                        console.error("Error deleting task: ", error);
+                    });
+            }
+        }
+    </script>
+</body>
+</html>
